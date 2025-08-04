@@ -1,24 +1,23 @@
-Sub SetupParentChildDropdowns()
-    Dim ws As Worksheet, dd As Worksheet
-    Dim lastRow As Long
-    Dim parentRange As Range, childRange As Range
+Public Sub MultiSelectDropdown(Target As Range, colNum As Long)
+    Dim separator As String
+    separator = vbLf
 
-    Set ws = ThisWorkbook.Sheets("Sheet1") ' Change as needed
-    Set dd = ThisWorkbook.Sheets("dropdowns")
+    If Target.Column = colNum And Target.Validation.Type = xlValidateList Then
+        Application.EnableEvents = False
+        Dim valOld As String, valNew As String
+        valOld = Target.Value
+        valNew = Target.Text
 
-    ' Define named range for parents
-    dd.Names.Add Name:="ParentList", RefersTo:=dd.Range("H2:H125")
-
-    ' Clear previous validations
-    ws.Range("F2:F50000").Validation.Delete
-    ws.Range("G2:G50000").Validation.Delete
-
-    ' Set parent dropdown validation
-    With ws.Range("F2:F50000").Validation
-        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
-             Operator:=xlBetween, Formula1:="=ParentList"
-        .IgnoreBlank = True
-        .InCellDropdown = True
-        .ShowError = True
-    End With
+        Dim values() As String
+        If valOld <> "" Then
+            If InStr(1, valOld, valNew) = 0 Then
+                Target.Value = valOld & separator & valNew
+            Else
+                Target.Value = valOld ' Avoid duplicate
+            End If
+        Else
+            Target.Value = valNew
+        End If
+        Application.EnableEvents = True
+    End If
 End Sub
