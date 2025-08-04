@@ -106,7 +106,7 @@ Private Sub Worksheet_Change(ByVal Target As Range)
                 On Error GoTo CleanUp
             End If
         Else
-            ' For multi-cell changes (copy/paste/delete), just update dependent dropdowns for affected rows
+            ' For multi-cell changes (copy/paste/delete), ONLY update dependent dropdowns, NO UNDO or multi-select logic!
             For Each parentCell In Intersect(Target, Me.Range("F2:F50000"))
                 Set childCell = Me.Cells(parentCell.Row, "G")
                 childList = ""
@@ -206,4 +206,3 @@ Private Sub Worksheet_Change(ByVal Target As Range)
 CleanUp:
     Application.EnableEvents = True
 End Sub
-
