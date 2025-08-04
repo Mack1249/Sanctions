@@ -1,83 +1,10 @@
 Private Sub Worksheet_Change(ByVal Target As Range)
-    Dim separator As String: separator = Chr(10)
-    Dim cell As Range, val As String, parentList As Variant
-    Dim wsDD As Worksheet: Set wsDD = ThisWorkbook.Sheets("dropdowns")
-    Dim i As Long, childList As String
-    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
-
-    ' Build mapping
-    For i = 2 To 125
-        If wsDD.Cells(i, "H").Value <> "" And wsDD.Cells(i, "I").Value <> "" Then
-            If Not dict.exists(wsDD.Cells(i, "H").Value) Then
-                dict(wsDD.Cells(i, "H").Value) = wsDD.Cells(i, "I").Value
-            Else
-                dict(wsDD.Cells(i, "H").Value) = dict(wsDD.Cells(i, "H").Value) & separator & wsDD.Cells(i, "I").Value
-            End If
-        End If
-    Next i
-
-    ' Multi-select in F or G
-    If Not Intersect(Target, Range("F2:F50000")) Is Nothing Then
-        Application.EnableEvents = False
-        For Each cell In Intersect(Target, Range("F2:F50000"))
-            If cell.Validation.Type = 3 Then
-                If InStr(cell.Value, separator) = 0 Then
-                    ' First entry
-                Else
-                    If Not IsEmpty(cell.Value) Then
-                        cell.Value = cell.Value & separator & Target.Value
-                    End If
-                End If
-            End If
-        Next cell
-        Application.EnableEvents = True
-    End If
-
-    ' Populate Child Dropdowns
-    If Not Intersect(Target, Range("F2:F50000")) Is Nothing Then
-        For Each cell In Intersect(Target, Range("F2:F50000"))
-            If cell.Value <> "" Then
-                parentList = Split(cell.Value, separator)
-                childList = ""
-                For i = LBound(parentList) To UBound(parentList)
-                    If dict.exists(parentList(i)) Then
-                        If childList = "" Then
-                            childList = dict(parentList(i))
-                        Else
-                            childList = childList & separator & dict(parentList(i))
-                        End If
-                    End If
-                Next i
-                ' Remove duplicates
-                childList = Join(UniqueSplit(childList, separator), separator)
-                ' Apply validation to corresponding G cell
-                With Me.Cells(cell.Row, "G").Validation
-                    .Delete
-                    .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
-                         Operator:=xlBetween, Formula1:="=""" & childList & """"
-                    .IgnoreBlank = True
-                    .InCellDropdown = True
-                End With
-            End If
-        Next cell
+    If Target.Cells.Count > 1 Then Exit Sub
+    If Target.Row < 2 Then Exit Sub
+    If Target.Column = 6 Then ' F - Parent
+        Call MultiSelectDropdown(Target, 6)
+        Call UpdateChildDropdown(Target.Row)
+    ElseIf Target.Column = 7 Then ' G - Child
+        Call MultiSelectDropdown(Target, 7)
     End If
 End Sub
-
-Function UniqueSplit(text As String, sep As String) As Variant
-    Dim arr As Variant: arr = Split(text, sep)
-    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
-    Dim i As Long, out() As String, count As Long
-
-    For i = LBound(arr) To UBound(arr)
-        If Not dict.exists(Trim(arr(i))) Then dict.Add Trim(arr(i)), 1
-    Next i
-
-    ReDim out(0 To dict.Count - 1)
-    count = 0
-    For Each k In dict.Keys
-        out(count) = k
-        count = count + 1
-    Next k
-
-    UniqueSplit = out
-End Function
