@@ -1,10 +1,49 @@
-Private Sub Worksheet_Change(ByVal Target As Range)
-    If Target.Cells.Count > 1 Then Exit Sub
-    If Target.Row < 2 Then Exit Sub
-    If Target.Column = 6 Then ' F - Parent
-        Call MultiSelectDropdown(Target, 6)
-        Call UpdateChildDropdown(Target.Row)
-    ElseIf Target.Column = 7 Then ' G - Child
-        Call MultiSelectDropdown(Target, 7)
-    End If
+Public Sub UpdateChildDropdown(rowNum As Long)
+    Dim ws As Worksheet, wsDrop As Worksheet
+    Set ws = ThisWorkbook.Sheets("Sheet1")
+    Set wsDrop = ThisWorkbook.Sheets("Dropdowns")
+
+    Dim parentCell As Range, childCell As Range
+    Set parentCell = ws.Cells(rowNum, 6)
+    Set childCell = ws.Cells(rowNum, 7)
+
+    Dim parentValues() As String
+    Dim allChildren As Collection
+    Set allChildren = New Collection
+    On Error Resume Next
+    parentValues = Split(parentCell.Value, vbLf)
+
+    Dim i As Long
+    For i = LBound(parentValues) To UBound(parentValues)
+        Dim j As Long
+        For j = 2 To 125
+            If Trim(wsDrop.Cells(j, 8).Value) = Trim(parentValues(i)) Then
+                If wsDrop.Cells(j, 9).Value <> "" Then
+                    allChildren.Add wsDrop.Cells(j, 9).Value, CStr(wsDrop.Cells(j, 9).Value)
+                End If
+            End If
+        Next j
+    Next i
+    On Error GoTo 0
+
+    Dim dvList As String
+    For i = 1 To allChildren.Count
+        If dvList = "" Then
+            dvList = allChildren(i)
+        Else
+            dvList = dvList & "," & allChildren(i)
+        End If
+    Next i
+
+    With childCell.Validation
+        .Delete
+        If dvList <> "" Then
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
+                 Operator:=xlBetween, Formula1:=dvList
+            .IgnoreBlank = True
+            .InCellDropdown = True
+            .ShowInput = True
+            .ShowError = True
+        End If
+    End With
 End Sub
