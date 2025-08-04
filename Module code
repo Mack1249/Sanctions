@@ -1,0 +1,60 @@
+Sub UpdateChildValidation(parentCell As Range)
+    Dim separator As String: separator = Chr(10)
+    Dim parentValues() As String
+    Dim childList As String
+    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
+    Dim i As Long
+    Dim wsDD As Worksheet: Set wsDD = ThisWorkbook.Sheets("dropdowns")
+
+    ' Build parent-child mapping
+    For i = 2 To 125
+        Dim pVal As String: pVal = Trim(wsDD.Cells(i, "H").Value)
+        Dim cVal As String: cVal = Trim(wsDD.Cells(i, "I").Value)
+        If pVal <> "" And cVal <> "" Then
+            If Not dict.exists(pVal) Then
+                dict.Add pVal, cVal
+            Else
+                dict(pVal) = dict(pVal) & "," & cVal
+            End If
+        End If
+    Next i
+
+    ' Get selected parents
+    If parentCell.Value = "" Then Exit Sub
+    parentValues = Split(parentCell.Value, separator)
+
+    Dim allChildren As String: allChildren = ""
+    Dim p As Variant
+    For Each p In parentValues
+        If dict.exists(Trim(p)) Then
+            allChildren = allChildren & dict(Trim(p)) & ","
+        End If
+    Next
+
+    ' Deduplicate
+    Dim children() As String: children = Split(allChildren, ",")
+    Dim unique As Object: Set unique = CreateObject("Scripting.Dictionary")
+    Dim childFinal As String: childFinal = ""
+    For i = LBound(children) To UBound(children)
+        If Trim(children(i)) <> "" Then
+            If Not unique.exists(Trim(children(i))) Then
+                unique.Add Trim(children(i)), 1
+                childFinal = childFinal & Trim(children(i)) & ","
+            End If
+        End If
+    Next i
+    If Right(childFinal, 1) = "," Then childFinal = Left(childFinal, Len(childFinal) - 1)
+
+    ' Apply validation to G column (same row)
+    With parentCell.Offset(0, 1).Validation
+        .Delete
+        If childFinal <> "" Then
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=childFinal
+            .IgnoreBlank = True
+            .InCellDropdown = True
+            .ShowInput = True
+            .ShowError = True
+        End If
+    End With
+End Sub
+
