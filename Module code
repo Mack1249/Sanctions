@@ -1,60 +1,24 @@
-Sub UpdateChildValidation(parentCell As Range)
-    Dim separator As String: separator = Chr(10)
-    Dim parentValues() As String
-    Dim childList As String
-    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
-    Dim i As Long
-    Dim wsDD As Worksheet: Set wsDD = ThisWorkbook.Sheets("dropdowns")
+Sub SetupParentChildDropdowns()
+    Dim ws As Worksheet, dd As Worksheet
+    Dim lastRow As Long
+    Dim parentRange As Range, childRange As Range
 
-    ' Build parent-child mapping
-    For i = 2 To 125
-        Dim pVal As String: pVal = Trim(wsDD.Cells(i, "H").Value)
-        Dim cVal As String: cVal = Trim(wsDD.Cells(i, "I").Value)
-        If pVal <> "" And cVal <> "" Then
-            If Not dict.exists(pVal) Then
-                dict.Add pVal, cVal
-            Else
-                dict(pVal) = dict(pVal) & "," & cVal
-            End If
-        End If
-    Next i
+    Set ws = ThisWorkbook.Sheets("Sheet1") ' Change as needed
+    Set dd = ThisWorkbook.Sheets("dropdowns")
 
-    ' Get selected parents
-    If parentCell.Value = "" Then Exit Sub
-    parentValues = Split(parentCell.Value, separator)
+    ' Define named range for parents
+    dd.Names.Add Name:="ParentList", RefersTo:=dd.Range("H2:H125")
 
-    Dim allChildren As String: allChildren = ""
-    Dim p As Variant
-    For Each p In parentValues
-        If dict.exists(Trim(p)) Then
-            allChildren = allChildren & dict(Trim(p)) & ","
-        End If
-    Next
+    ' Clear previous validations
+    ws.Range("F2:F50000").Validation.Delete
+    ws.Range("G2:G50000").Validation.Delete
 
-    ' Deduplicate
-    Dim children() As String: children = Split(allChildren, ",")
-    Dim unique As Object: Set unique = CreateObject("Scripting.Dictionary")
-    Dim childFinal As String: childFinal = ""
-    For i = LBound(children) To UBound(children)
-        If Trim(children(i)) <> "" Then
-            If Not unique.exists(Trim(children(i))) Then
-                unique.Add Trim(children(i)), 1
-                childFinal = childFinal & Trim(children(i)) & ","
-            End If
-        End If
-    Next i
-    If Right(childFinal, 1) = "," Then childFinal = Left(childFinal, Len(childFinal) - 1)
-
-    ' Apply validation to G column (same row)
-    With parentCell.Offset(0, 1).Validation
-        .Delete
-        If childFinal <> "" Then
-            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=childFinal
-            .IgnoreBlank = True
-            .InCellDropdown = True
-            .ShowInput = True
-            .ShowError = True
-        End If
+    ' Set parent dropdown validation
+    With ws.Range("F2:F50000").Validation
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
+             Operator:=xlBetween, Formula1:="=ParentList"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .ShowError = True
     End With
 End Sub
-
