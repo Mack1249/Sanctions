@@ -20,9 +20,10 @@ Private Sub Worksheet_Change(ByVal Target As Range)
 
     Application.EnableEvents = False
 
-    ' Multi-select logic for F2:F50000
+    ' Only run multi-select logic if a single cell is changed in F2:F50000
     If Not Intersect(Target, Me.Range("F2:F50000")) Is Nothing Then
-        For Each parentCell In Intersect(Target, Me.Range("F2:F50000"))
+        If Target.CountLarge = 1 Then
+            Set parentCell = Target
             If parentCell.Validation.Type = 3 Then
                 newValue = parentCell.Value
                 Application.Undo
@@ -58,17 +59,14 @@ Private Sub Worksheet_Change(ByVal Target As Range)
                     End If
                 End If
             End If
-
-            ' Dependent dropdown logic for G
+            ' Update dependent dropdown for this row only
             Set childCell = Me.Cells(parentCell.Row, "G")
             childList = ""
-
             If parentCell.Value <> "" Then
                 selectedParents = Split(parentCell.Value, DelimiterType)
                 For i = LBound(selectedParents) To UBound(selectedParents)
                     selectedParents(i) = Trim(selectedParents(i))
                 Next i
-
                 For j = 2 To lastRow
                     For i = LBound(selectedParents) To UBound(selectedParents)
                         If selectedParents(i) <> "" Then
@@ -80,16 +78,13 @@ Private Sub Worksheet_Change(ByVal Target As Range)
                         End If
                     Next i
                 Next j
-
                 If Len(childList) > 0 Then childList = Left(childList, Len(childList) - 1)
-
                 On Error Resume Next
                 With childCell.Validation
                     .Delete
                     If childList <> "" Then
                         .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=childList
                     Else
-                        ' Always restore validation with a dummy list (single space)
                         .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=" "
                     End If
                     .IgnoreBlank = True
@@ -110,12 +105,62 @@ Private Sub Worksheet_Change(ByVal Target As Range)
                 End With
                 On Error GoTo CleanUp
             End If
-        Next parentCell
+        Else
+            ' For multi-cell changes (copy/paste/delete), just update dependent dropdowns for affected rows
+            For Each parentCell In Intersect(Target, Me.Range("F2:F50000"))
+                Set childCell = Me.Cells(parentCell.Row, "G")
+                childList = ""
+                If parentCell.Value <> "" Then
+                    selectedParents = Split(parentCell.Value, DelimiterType)
+                    For i = LBound(selectedParents) To UBound(selectedParents)
+                        selectedParents(i) = Trim(selectedParents(i))
+                    Next i
+                    For j = 2 To lastRow
+                        For i = LBound(selectedParents) To UBound(selectedParents)
+                            If selectedParents(i) <> "" Then
+                                If StrComp(wsDropdowns.Cells(j, "H").Value, selectedParents(i), vbTextCompare) = 0 Then
+                                    If InStr(1, "," & childList & ",", "," & wsDropdowns.Cells(j, "I").Value & ",", vbTextCompare) = 0 Then
+                                        childList = childList & wsDropdowns.Cells(j, "I").Value & ","
+                                    End If
+                                End If
+                            End If
+                        Next i
+                    Next j
+                    If Len(childList) > 0 Then childList = Left(childList, Len(childList) - 1)
+                    On Error Resume Next
+                    With childCell.Validation
+                        .Delete
+                        If childList <> "" Then
+                            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=childList
+                        Else
+                            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=" "
+                        End If
+                        .IgnoreBlank = True
+                        .InCellDropdown = True
+                        .ShowInput = True
+                        .ShowError = True
+                    End With
+                    On Error GoTo CleanUp
+                Else
+                    On Error Resume Next
+                    With childCell.Validation
+                        .Delete
+                        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=" "
+                        .IgnoreBlank = True
+                        .InCellDropdown = True
+                        .ShowInput = True
+                        .ShowError = True
+                    End With
+                    On Error GoTo CleanUp
+                End If
+            Next parentCell
+        End If
     End If
 
-    ' Multi-select logic for G2:G50000
+    ' Only run multi-select logic if a single cell is changed in G2:G50000
     If Not Intersect(Target, Me.Range("G2:G50000")) Is Nothing Then
-        For Each childCell In Intersect(Target, Me.Range("G2:G50000"))
+        If Target.CountLarge = 1 Then
+            Set childCell = Target
             If childCell.Validation.Type = 3 Then
                 newValue = childCell.Value
                 Application.Undo
@@ -151,8 +196,8 @@ Private Sub Worksheet_Change(ByVal Target As Range)
                     End If
                 End If
             End If
-            ' No need to reset validation here; it's handled above with parentCell
-        Next childCell
+        End If
+        ' For multi-cell changes in G, do nothing (let Excel handle)
     End If
 
     Application.EnableEvents = True
