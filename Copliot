@@ -1,0 +1,131 @@
+'Worksheet
+Private Sub Workbook_Open()
+    Call SetupValidationForFG
+End Sub
+
+
+'Sheet
+Private Sub Worksheet_Change(ByVal Target As Range)
+    Dim rngF As Range, rngG As Range
+    Set rngF = Range("F2:F50000")
+    Set rngG = Range("G2:G50000")
+
+    If Not Intersect(Target, rngF) Is Nothing Then
+        Application.EnableEvents = False
+        Call UpdateChildValidation(Target)
+        Call HandleMultiSelect(Target)
+        Application.EnableEvents = True
+    ElseIf Not Intersect(Target, rngG) Is Nothing Then
+        Application.EnableEvents = False
+        Call HandleMultiSelect(Target)
+        Application.EnableEvents = True
+    End If
+End Sub
+
+'Module
+Public Sub SetupValidationForFG()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("Sheet1") ' Change to actual sheet name
+    
+    Dim lastRow As Long: lastRow = 50000
+    Dim i As Long
+    
+    For i = 2 To lastRow
+        With ws.Cells(i, 6).Validation
+            .Delete
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=dropdowns!$H$2:$H$125"
+            .IgnoreBlank = True
+            .InCellDropdown = True
+        End With
+        Call UpdateChildValidation(ws.Cells(i, 6))
+    Next i
+End Sub
+
+Public Sub UpdateChildValidation(cellF As Range)
+    Dim wsDrop As Worksheet
+    Set wsDrop = ThisWorkbook.Sheets("dropdowns")
+
+    Dim parents As Variant, cellG As Range
+    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
+    
+    parents = Split(cellF.Value, Chr(10))
+    
+    Dim i As Long
+    For i = 2 To 125
+        If Not IsError(wsDrop.Cells(i, "H")) Then
+            If Not IsEmpty(wsDrop.Cells(i, "H")) Then
+                Dim p As String: p = Trim(wsDrop.Cells(i, "H").Value)
+                Dim c As String: c = wsDrop.Cells(i, "I").Value
+                If Not dict.exists(p) Then dict(p) = ""
+                dict(p) = dict(p) & c & Chr(10)
+            End If
+        End If
+    Next i
+    
+    Dim childList As String
+    For Each p In parents
+        p = Trim(p)
+        If dict.exists(p) Then childList = childList & dict(p)
+    Next p
+    
+    ' Remove duplicates
+    Dim raw() As String: raw = Split(childList, Chr(10))
+    Dim finalDict As Object: Set finalDict = CreateObject("Scripting.Dictionary")
+    For i = LBound(raw) To UBound(raw)
+        If Trim(raw(i)) <> "" Then finalDict(Trim(raw(i))) = 1
+    Next i
+    
+    childList = ""
+    For Each key In finalDict.keys
+        childList = childList & key & ","
+    Next key
+    If Right(childList, 1) = "," Then childList = Left(childList, Len(childList) - 1)
+
+    Set cellG = cellF.Offset(0, 1)
+    With cellG.Validation
+        .Delete
+        If childList <> "" Then
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=" & Chr(34) & childList & Chr(34)
+            .IgnoreBlank = True
+            .InCellDropdown = True
+        End If
+    End With
+End Sub
+
+Public Sub HandleMultiSelect(cell As Range)
+    Dim valList As Variant, clicked As String, currentVal As String
+    If cell.Validation.Type <> xlValidateList Then Exit Sub
+
+    clicked = cell.Value
+    If cell.Offset(0, 0).Value = "" Then Exit Sub
+    
+    Application.Undo
+    currentVal = cell.Value
+    
+    If currentVal = "" Then
+        cell.Value = clicked
+    Else
+        valList = Split(currentVal, Chr(10))
+        Dim found As Boolean: found = False
+        Dim i As Long
+        
+        For i = LBound(valList) To UBound(valList)
+            If Trim(valList(i)) = clicked Then
+                valList(i) = ""
+                found = True
+            End If
+        Next i
+        
+        Dim newVal As String
+        For i = LBound(valList) To UBound(valList)
+            If Trim(valList(i)) <> "" Then
+                newVal = newVal & Trim(valList(i)) & Chr(10)
+            End If
+        Next i
+        
+        If Not found Then newVal = newVal & clicked & Chr(10)
+        If Right(newVal, 1) = Chr(10) Then newVal = Left(newVal, Len(newVal) - 1)
+        
+        cell.Value = newVal
+    End If
+End Sub
