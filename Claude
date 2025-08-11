@@ -1,599 +1,200 @@
-# EXCEL VBA MULTI-SELECT DROPDOWN - COMPLETE INSTALLATION GUIDE
-
-## 📍 **LOCATION 1: WORKSHEET MODULE (Main Sheet)**
-**Where:** Right-click your main worksheet tab → "View Code"
-**What:** This handles all the dropdown functionality
-
-```vb
-' ========================================================================
-' WORKSHEET MODULE CODE - PUT THIS IN YOUR MAIN WORKSHEET
-' Right-click worksheet tab → View Code → Paste this code
-' ========================================================================
-
-' Global flag to prevent recursive calls
-Private isProcessing As Boolean
-
-Private Sub Worksheet_Change(ByVal Target As Range)
-    On Error GoTo ErrorHandler
-    
-    ' Prevent recursive calls and multiple processing
-    If isProcessing Then Exit Sub
-    If Target.Cells.Count > 100 Then Exit Sub ' Avoid processing large ranges
-    
-    ' Define ranges
-    Dim ParentRange As Range
-    Dim ChildRange As Range
-    Dim ExistingRange As Range
-    
-    Set ParentRange = Me.Range("F2:F50000")
-    Set ChildRange = Me.Range("G2:G50000")
-    Set ExistingRange = Me.Range("H2:L50000") ' Existing macro range
-    
-    ' Safety check: Only process single cells or small ranges
-    If Target.Cells.Count = 1 Then
-        ' Check if change is in our target ranges
-        If Not Intersect(Target, ParentRange) Is Nothing Then
-            HandleParentChange Target, ParentRange, ChildRange
-        ElseIf Not Intersect(Target, ChildRange) Is Nothing Then
-            HandleChildChange Target, ChildRange
-        ElseIf Not Intersect(Target, ExistingRange) Is Nothing Then
-            HandleExistingRange Target, ExistingRange
-        End If
-    End If
-    
-    Exit Sub
-    
-ErrorHandler:
-    isProcessing = False
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    Application.Calculation = xlCalculationAutomatic
-End Sub
-
-Private Sub HandleParentChange(ByVal Target As Range, ParentRange As Range, ChildRange As Range)
-    On Error GoTo ErrorHandler
-    
-    If isProcessing Then Exit Sub
-    isProcessing = True
-    
-    Application.EnableEvents = False
-    Application.ScreenUpdating = False
-    
-    Dim cell As Range
-    For Each cell In Target
-        If Not Intersect(cell, ParentRange) Is Nothing Then
-            ' Handle multi-select for parent
-            ProcessMultiSelect cell
-            
-            ' Update child dropdown for this row - with safety checks
-            SafeUpdateChildDropdown cell, ChildRange
-        End If
-    Next cell
-    
-    isProcessing = False
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    Exit Sub
-    
-ErrorHandler:
-    isProcessing = False
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-End Sub
-
-Private Sub HandleChildChange(ByVal Target As Range, ChildRange As Range)
-    On Error GoTo ErrorHandler
-    
-    If isProcessing Then Exit Sub
-    isProcessing = True
-    
-    Application.EnableEvents = False
-    Application.ScreenUpdating = False
-    
-    Dim cell As Range
-    For Each cell In Target
-        If Not Intersect(cell, ChildRange) Is Nothing Then
-            ' Handle multi-select for child
-            ProcessMultiSelect cell
-        End If
-    Next cell
-    
-    isProcessing = False
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    Exit Sub
-    
-ErrorHandler:
-    isProcessing = False
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-End Sub
-
-Private Sub HandleExistingRange(ByVal Target As Range, ExistingRange As Range)
-    On Error GoTo ErrorHandler
-    
-    If isProcessing Then Exit Sub
-    isProcessing = True
-    
-    Application.EnableEvents = False
-    Application.ScreenUpdating = False
-    
-    Dim cell As Range
-    For Each cell In Target
-        If Not Intersect(cell, ExistingRange) Is Nothing Then
-            ' Handle existing multi-select functionality
-            ProcessMultiSelect cell
-        End If
-    Next cell
-    
-    isProcessing = False
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    Exit Sub
-    
-ErrorHandler:
-    isProcessing = False
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-End Sub
-
-Private Sub ProcessMultiSelect(ByVal Target As Range)
-    On Error GoTo ErrorHandler
-    
-    Dim oldValue As String
-    Dim newValue As String
-    Dim cellValue As String
-    
-    ' Get the new value that was just entered
-    newValue = Target.Value
-    
-    ' Get the old value using Application.Undo trick
-    Application.EnableEvents = False
-    Application.Undo
-    oldValue = Target.Value
-    Target.Value = newValue
-    Application.EnableEvents = True
-    
-    ' If old value is empty, just set the new value
-    If oldValue = "" Then
-        Target.Value = newValue
-        Exit Sub
-    End If
-    
-    ' If new value is empty, clear the cell
-    If newValue = "" Then
-        Target.Value = ""
-        Exit Sub
-    End If
-    
-    ' Check if the new value already exists in the old value
-    Dim values As Variant
-    values = Split(oldValue, Chr(10))
-    
-    Dim i As Integer
-    Dim found As Boolean
-    found = False
-    
-    ' Check if value already exists
-    For i = 0 To UBound(values)
-        If Trim(values(i)) = Trim(newValue) Then
-            found = True
-            ' Remove the existing value
-            values(i) = "###REMOVE###"
-            Exit For
-        End If
-    Next i
-    
-    If found Then
-        ' Rebuild string without the removed value
-        cellValue = ""
-        For i = 0 To UBound(values)
-            If values(i) <> "###REMOVE###" And Trim(values(i)) <> "" Then
-                If cellValue = "" Then
-                    cellValue = values(i)
-                Else
-                    cellValue = cellValue & Chr(10) & values(i)
-                End If
-            End If
-        Next i
-        Target.Value = cellValue
-    Else
-        ' Add the new value
-        Target.Value = oldValue & Chr(10) & newValue
-    End If
-    
-    Exit Sub
-    
-ErrorHandler:
-    Application.EnableEvents = True
-End Sub
-
-Private Sub SafeUpdateChildDropdown(ByVal ParentCell As Range, ChildRange As Range)
-    On Error GoTo ErrorHandler
-    
-    ' Get the corresponding child cell
-    Dim ChildCell As Range
-    Set ChildCell = ChildRange.Cells(ParentCell.Row - 1, 1) ' Adjust for G2 start
-    
-    ' Store existing validation formula as backup
-    Dim existingFormula As String
-    existingFormula = ""
-    
-    On Error Resume Next
-    existingFormula = ChildCell.Validation.Formula1
-    On Error GoTo ErrorHandler
-    
-    ' Get selected parents
-    Dim selectedParents As String
-    selectedParents = ParentCell.Value
-    
-    If selectedParents = "" Then
-        ' Don't delete validation - just clear the cell value if needed
-        Exit Sub
-    End If
-    
-    ' Get children for selected parents
-    Dim childList As String
-    childList = GetChildrenForParents(selectedParents)
-    
-    If childList <> "" Then
-        ' Try to apply validation - if it fails, restore backup
-        On Error GoTo RestoreValidation
-        
-        ' Only update if the formula is different
-        If existingFormula <> childList Then
-            ChildCell.Validation.Delete
-            ChildCell.Validation.Add Type:=xlValidateList, _
-                                    AlertStyle:=xlValidAlertStop, _
-                                    Formula1:=childList
-            ChildCell.Validation.IgnoreBlank = True
-            ChildCell.Validation.InCellDropdown = True
-        End If
-    End If
-    
-    Exit Sub
-    
-RestoreValidation:
-    ' If something went wrong, try to restore the original validation
-    On Error Resume Next
-    If existingFormula <> "" Then
-        ChildCell.Validation.Delete
-        ChildCell.Validation.Add Type:=xlValidateList, _
-                                AlertStyle:=xlValidAlertStop, _
-                                Formula1:=existingFormula
-    End If
-    Exit Sub
-    
-ErrorHandler:
-    ' Silent error handling - don't break the workflow
-    On Error Resume Next
-End Sub
-
-Private Function GetChildrenForParents(selectedParents As String) As String
-    On Error GoTo ErrorHandler
-    
-    Dim parentArray As Variant
-    Dim childrenDict As Object
-    Dim i As Integer, j As Integer
-    Dim parentValue As String
-    Dim childValue As String
-    Dim result As String
-    
-    ' Create dictionary to store unique children
-    Set childrenDict = CreateObject("Scripting.Dictionary")
-    
-    ' Split selected parents
-    parentArray = Split(selectedParents, Chr(10))
-    
-    ' Get data from dropdowns sheet
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets("dropdowns")
-    
-    Dim parentData As Range
-    Dim childData As Range
-    Set parentData = ws.Range("H2:H125")
-    Set childData = ws.Range("I2:I125")
-    
-    ' For each selected parent
-    For i = 0 To UBound(parentArray)
-        parentValue = Trim(parentArray(i))
-        If parentValue <> "" Then
-            ' Find matching children
-            For j = 1 To parentData.Rows.Count
-                If Trim(parentData.Cells(j, 1).Value) = parentValue Then
-                    childValue = Trim(childData.Cells(j, 1).Value)
-                    If childValue <> "" Then
-                        childrenDict(childValue) = True
-                    End If
-                End If
-            Next j
-        End If
-    Next i
-    
-    ' Build result string
-    Dim keys As Variant
-    keys = childrenDict.Keys
-    
-    For i = 0 To UBound(keys)
-        If result = "" Then
-            result = keys(i)
-        Else
-            result = result & "," & keys(i)
-        End If
-    Next i
-    
-    GetChildrenForParents = result
-    Exit Function
-    
-ErrorHandler:
-    GetChildrenForParents = ""
-End Function
-
-Private Sub Worksheet_Activate()
-    On Error Resume Next
-    Call SetupInitialValidation
-End Sub
-
-Private Sub SetupInitialValidation()
-    On Error Resume Next
-    
-    ' Prevent recursive calls
-    If isProcessing Then Exit Sub
-    
-    Application.EnableEvents = False
-    Application.ScreenUpdating = False
-    
-    ' Check if dropdowns sheet exists
-    Dim ws As Worksheet
-    Set ws = Nothing
-    Set ws = ThisWorkbook.Worksheets("dropdowns")
-    If ws Is Nothing Then
-        Application.EnableEvents = True
-        Application.ScreenUpdating = True
-        Exit Sub
-    End If
-    
-    ' Setup parent dropdown validation ONLY if it doesn't exist
-    Dim parentRange As Range
-    Set parentRange = Me.Range("F2:F50000")
-    
-    ' Check if validation already exists
-    Dim hasValidation As Boolean
-    hasValidation = False
-    
-    On Error Resume Next
-    hasValidation = (parentRange.Cells(1, 1).Validation.Type <> 0)
-    On Error Resume Next
-    
-    ' Only setup validation if it doesn't exist
-    If Not hasValidation Then
-        Dim parentList As String
-        Dim i As Integer
-        Dim cellValue As String
-        
-        ' Build parent list
-        For i = 2 To 125
-            cellValue = Trim(ws.Cells(i, 8).Value) ' Column H
-            If cellValue <> "" Then
-                If parentList = "" Then
-                    parentList = cellValue
-                Else
-                    If InStr(parentList, cellValue) = 0 Then ' Avoid duplicates
-                        parentList = parentList & "," & cellValue
-                    End If
-                End If
-            End If
-        Next i
-        
-        ' Apply validation to parent range - with error handling
-        If parentList <> "" Then
-            On Error Resume Next
-            parentRange.Validation.Add Type:=xlValidateList, _
-                                       AlertStyle:=xlValidAlertStop, _
-                                       Formula1:=parentList
-            parentRange.Validation.IgnoreBlank = True
-            parentRange.Validation.InCellDropdown = True
-            On Error Resume Next
-        End If
-    End If
-    
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-End Sub
-
-Private Sub Worksheet_SelectionChange(ByVal Target As Range)
-    ' This helps maintain dropdown functionality after copy-paste operations
-    On Error Resume Next
-    
-    ' Avoid processing large selections
-    If Target.Cells.Count > 50 Then Exit Sub
-    If isProcessing Then Exit Sub
-    
-    ' Check if we're in parent column and validation is missing (only for single cells)
-    If Target.Cells.Count = 1 And Not Intersect(Target, Me.Range("F2:F50000")) Is Nothing Then
-        If Target.Validation.Type = 0 Then ' No validation
-            ' Try to restore validation without disrupting workflow
-            On Error Resume Next
-            Call SetupInitialValidation
-            On Error Resume Next
-        End If
-    End If
-End Sub
-```
-
----
-
-## 📍 **LOCATION 2: THISWORKBOOK MODULE**
-**Where:** In VBA Editor → Project Explorer → Double-click "ThisWorkbook"
-**What:** Handles file opening/closing events
-
-```vb
-' ========================================================================
-' THISWORKBOOK MODULE CODE - PUT THIS IN THISWORKBOOK
-' VBA Editor → Project Explorer → Double-click "ThisWorkbook" → Paste this
-' ========================================================================
-
+' Workbook
 Private Sub Workbook_Open()
     On Error Resume Next
-    Application.EnableEvents = True
+    Call SetupValidationForFG
+    On Error GoTo 0
+End Sub
+'Sheet
+' Code Generated by Sidekick is for learning and experimentation purposes only.
+Private Sub Worksheet_Change(ByVal Target As Range)
+    If Target.Cells.Count > 1 Then Exit Sub ' Avoid processing multiple cells
     
-    ' Initialize all worksheets (except dropdowns sheet)
-    Dim ws As Worksheet
-    For Each ws In ThisWorkbook.Worksheets
-        If ws.Name <> "dropdowns" Then
-            ws.Activate
-        End If
-    Next ws
-End Sub
-
-Private Sub Workbook_BeforeSave(SaveAsUI As Boolean, Cancel As Boolean)
-    On Error Resume Next
-    Application.EnableEvents = True
-End Sub
-
-Private Sub Workbook_BeforeClose(Cancel As Boolean)
-    On Error Resume Next
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    Application.Calculation = xlCalculationAutomatic
-End Sub
-```
-
----
-
-## 📍 **LOCATION 3: STANDARD MODULE (Utility Functions)**
-**Where:** VBA Editor → Insert → Module → Paste this code
-**What:** Contains utility functions you can run manually
-
-```vb
-' ========================================================================
-' STANDARD MODULE CODE - PUT THIS IN A NEW MODULE
-' VBA Editor → Insert → Module → Paste this code
-' ========================================================================
-
-Public Sub RefreshAllDropdowns()
-    ' Call this macro to refresh all dropdowns if needed
-    On Error Resume Next
-    
-    ' Get the active worksheet
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
+    Dim rngF As Range, rngG As Range
+    Set rngF = Me.Range("F2:F50000")
+    Set rngG = Me.Range("G2:G50000")
     
     Application.EnableEvents = False
-    Application.ScreenUpdating = False
     
-    ' First, setup initial validation safely
-    Call ws.SetupInitialValidation
+    On Error GoTo ErrorHandler
     
-    ' Update all child dropdowns based on current parent selections
+    If Not Intersect(Target, rngF) Is Nothing Then
+        Call UpdateChildValidation(Target)
+        Call HandleMultiSelect(Target)
+    ElseIf Not Intersect(Target, rngG) Is Nothing Then
+        Call HandleMultiSelect(Target)
+    End If
+    
+ErrorHandler:
+    Application.EnableEvents = True
+    If Err.Number <> 0 Then
+        MsgBox "Error: " & Err.Description
+        Err.Clear
+    End If
+End Sub
+'Module
+' Code Generated by Sidekick is for learning and experimentation purposes only.
+Public Sub SetupValidationForFG()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet ' Changed from ThisWorkbook.Sheets("Sheet1")
+    
+    ' Or specify the exact sheet name:
+    ' Set ws = ThisWorkbook.Sheets("YourActualSheetName")
+    
+    Dim lastRow As Long
+    ' Find actual last row instead of using 50000
+    lastRow = ws.Cells(ws.Rows.Count, "F").End(xlUp).Row
+    If lastRow < 2 Then lastRow = 100 ' Set minimum range
+    
     Dim i As Long
-    Dim maxRow As Long
-    maxRow = ws.UsedRange.Rows.Count
-    If maxRow > 50000 Then maxRow = 50000
     
-    For i = 2 To maxRow + 10
-        If ws.Cells(i, 6).Value <> "" Then ' Column F has value
-            Call ws.SafeUpdateChildDropdown(ws.Cells(i, 6), ws.Range("G2:G50000"))
-        End If
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    
+    On Error Resume Next
+    
+    For i = 2 To lastRow
+        With ws.Cells(i, 6).Validation
+            .Delete
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
+                 Operator:=xlBetween, Formula1:="=dropdowns!$H$2:$H$125"
+            .IgnoreBlank = True
+            .InCellDropdown = True
+        End With
         
-        ' Exit early if we've gone past used range
-        If ws.Cells(i, 6).Value = "" And ws.Cells(i, 7).Value = "" Then
-            If i > maxRow Then Exit For
+        ' Only update child validation if there's a value
+        If ws.Cells(i, 6).Value <> "" Then
+            Call UpdateChildValidation(ws.Cells(i, 6))
         End If
     Next i
     
-    Application.EnableEvents = True
     Application.ScreenUpdating = True
-    
-    MsgBox "All dropdowns refreshed successfully!"
-End Sub
-
-Public Sub ClearAllValidation()
-    ' Emergency function to clear all validation if something goes wrong
-    On Error Resume Next
-    
-    Dim response As VbMsgBoxResult
-    response = MsgBox("This will remove all dropdown validation from columns F and G. Are you sure?", vbYesNo + vbExclamation, "Clear Validation")
-    
-    If response = vbYes Then
-        Application.EnableEvents = False
-        ActiveSheet.Range("F2:G50000").Validation.Delete
-        Application.EnableEvents = True
-        MsgBox "All validation cleared. Run RefreshAllDropdowns to restore."
-    End If
-End Sub
-
-Public Sub EnableEventsAndScreenUpdating()
-    ' Emergency function to restore Excel functionality
     Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    Application.Calculation = xlCalculationAutomatic
-    MsgBox "Excel events and screen updating restored."
+    On Error GoTo 0
 End Sub
 
-Public Sub CheckValidationStatus()
-    ' Diagnostic function to check current validation status
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
+Public Sub UpdateChildValidation(cellF As Range)
+    On Error GoTo ErrorHandler
     
-    Dim parentCell As Range
-    Dim childCell As Range
-    Set parentCell = ws.Range("F2")
-    Set childCell = ws.Range("G2")
+    Dim wsDrop As Worksheet
+    Set wsDrop = ThisWorkbook.Sheets("dropdowns")
     
-    Dim msg As String
-    msg = "Validation Status Report:" & vbCrLf & vbCrLf
+    ' Check if cellF has a value
+    If cellF.Value = "" Then Exit Sub
     
-    On Error Resume Next
-    If parentCell.Validation.Type = 0 Then
-        msg = msg & "Parent (F2): No validation" & vbCrLf
-    Else
-        msg = msg & "Parent (F2): Has validation" & vbCrLf
+    Dim parents As Variant, cellG As Range
+    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
+    
+    parents = Split(cellF.Value, Chr(10))
+    
+    ' Build parent-child dictionary
+    Dim i As Long
+    For i = 2 To 125
+        If Not IsError(wsDrop.Cells(i, "H")) And Not IsEmpty(wsDrop.Cells(i, "H")) Then
+            Dim p As String: p = Trim(CStr(wsDrop.Cells(i, "H").Value))
+            Dim c As String: c = CStr(wsDrop.Cells(i, "I").Value)
+            
+            If p <> "" And c <> "" Then
+                If Not dict.exists(p) Then dict(p) = ""
+                If dict(p) <> "" Then dict(p) = dict(p) & Chr(10)
+                dict(p) = dict(p) & c
+            End If
+        End If
+    Next i
+    
+    ' Build child list based on selected parents
+    Dim childList As String
+    Dim j As Long
+    For j = LBound(parents) To UBound(parents)
+        p = Trim(CStr(parents(j)))
+        If p <> "" And dict.exists(p) Then
+            If childList <> "" Then childList = childList & Chr(10)
+            childList = childList & dict(p)
+        End If
+    Next j
+    
+    ' Remove duplicates
+    If childList <> "" Then
+        Dim raw() As String: raw = Split(childList, Chr(10))
+        Dim finalDict As Object: Set finalDict = CreateObject("Scripting.Dictionary")
+        
+        For i = LBound(raw) To UBound(raw)
+            Dim item As String: item = Trim(raw(i))
+            If item <> "" Then finalDict(item) = 1
+        Next i
+        
+        childList = ""
+        Dim key As Variant
+        For Each key In finalDict.keys
+            If childList <> "" Then childList = childList & ","
+            childList = childList & key
+        Next key
     End If
     
-    If childCell.Validation.Type = 0 Then
-        msg = msg & "Child (G2): No validation" & vbCrLf
-    Else
-        msg = msg & "Child (G2): Has validation" & vbCrLf
-    End If
+    ' Apply validation to column G
+    Set cellG = cellF.Offset(0, 1)
+    With cellG.Validation
+        .Delete
+        If childList <> "" Then
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
+                 Operator:=xlBetween, Formula1:=childList
+            .IgnoreBlank = True
+            .InCellDropdown = True
+        End If
+    End With
     
-    MsgBox msg, vbInformation, "Validation Status"
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "Error in UpdateChildValidation: " & Err.Description
 End Sub
-```
 
----
-
-## 🔧 **INSTALLATION STEPS:**
-
-### **Step 1: Open VBA Editor**
-- Press `Alt + F11` in Excel
-
-### **Step 2: Worksheet Code**
-1. **Find your main worksheet** in Project Explorer (left panel)
-2. **Right-click the worksheet tab** → "View Code"
-3. **Delete any existing code** in that window
-4. **Copy and paste** the entire **LOCATION 1** code
-
-### **Step 3: ThisWorkbook Code**
-1. **Find "ThisWorkbook"** in Project Explorer
-2. **Double-click** on it
-3. **Copy and paste** the entire **LOCATION 2** code
-
-### **Step 4: Module Code**
-1. **Right-click** in Project Explorer
-2. **Insert** → **Module**
-3. **Copy and paste** the entire **LOCATION 3** code
-
-### **Step 5: Save and Test**
-1. **Save as .xlsm** (macro-enabled)
-2. **Close and reopen** the file
-3. **Test F2** dropdown first
-4. **Test G2** dropdown after selecting parent
-
-## 🚨 **EMERGENCY FUNCTIONS:**
-- `RefreshAllDropdowns()` - If dropdowns stop working
-- `EnableEventsAndScreenUpdating()` - If Excel freezes
-- `CheckValidationStatus()` - To check if validation exists
-- `ClearAllValidation()` - To reset everything
-
-**Run these from:** Developer tab → Macros → Select function → Run
+Public Sub HandleMultiSelect(cell As Range)
+    On Error GoTo ErrorHandler
+    
+    If cell.Validation.Type <> xlValidateList Then Exit Sub
+    
+    Dim clicked As String: clicked = cell.Value
+    If clicked = "" Then Exit Sub
+    
+    Application.Undo
+    Dim currentVal As String: currentVal = cell.Value
+    
+    If currentVal = "" Then
+        cell.Value = clicked
+    Else
+        Dim valList As Variant: valList = Split(currentVal, Chr(10))
+        Dim found As Boolean: found = False
+        Dim i As Long
+        
+        ' Check if clicked value already exists (to toggle it off)
+        For i = LBound(valList) To UBound(valList)
+            If Trim(CStr(valList(i))) = clicked Then
+                valList(i) = ""
+                found = True
+                Exit For
+            End If
+        Next i
+        
+        ' Rebuild the value string
+        Dim newVal As String
+        For i = LBound(valList) To UBound(valList)
+            If Trim(CStr(valList(i))) <> "" Then
+                If newVal <> "" Then newVal = newVal & Chr(10)
+                newVal = newVal & Trim(CStr(valList(i)))
+            End If
+        Next i
+        
+        ' If not found, add the new value
+        If Not found Then
+            If newVal <> "" Then newVal = newVal & Chr(10)
+            newVal = newVal & clicked
+        End If
+        
+        cell.Value = newVal
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "Error in HandleMultiSelect: " & Err.Description
+End Sub
